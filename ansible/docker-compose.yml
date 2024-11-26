@@ -1,0 +1,17 @@
+services:
+  app-gateway:
+    image: ${image_tag}
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - '9001:9001'
+    container_name: app-gateway
+    env_file:
+      - .env
+networks:
+  default:
+    external:
+      name: app-gateway-net

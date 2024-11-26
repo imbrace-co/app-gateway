@@ -1,0 +1,13 @@
+# Ansible inventory — replace with your own hostnames or IP addresses
+
+[app_gateway_dev]
+your-dev-server.example.com
+
+[app_gateway_stg]
+your-stg-server.example.com
+
+[app_gateway_demo]
+your-demo-server.example.com
+
+[app_gateway_prod]
+your-prod-server.example.com

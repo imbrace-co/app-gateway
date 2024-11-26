@@ -1,0 +1,58 @@
+FROM node:18 as base
+
+RUN corepack enable && corepack prepare pnpm@8.7.1 --activate
+
+FROM base AS deps
+
+WORKDIR /app
+
+COPY ./package.json ./pnpm-lock.yaml* ./
+
+RUN pnpm config set store-dir .pnpm-store
+
+RUN pnpm install
+
+FROM base AS builder
+
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN pnpm build
+
+FROM base AS runner
+
+WORKDIR /app
+
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules    
+
+# Copy .env file for configuration
+COPY .env ./.env
+
+# Copy and setup entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh && \
+    sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh
+
+# Build-time arguments (pass during docker build)
+ARG LICENSE_SECRET
+ARG LICENSE_REQUIRED=true
+ARG NODE_ENV=development
+ARG LOG_LEVEL=debug
+ARG CUSTOM_CONFIG
+
+# Set environment variables
+ENV LICENSE_SECRET=${LICENSE_SECRET}
+ENV LICENSE_REQUIRED=${LICENSE_REQUIRED}
+ENV NODE_ENV=${NODE_ENV}
+ENV LOG_LEVEL=${LOG_LEVEL}
+ENV CUSTOM_CONFIG=${CUSTOM_CONFIG}
+
+# Ensure license directory exists and has proper permissions
+RUN mkdir -p /app/licenses && chmod 755 /app/licenses
+
+# Use ENTRYPOINT to prevent override of license requirements
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+
+

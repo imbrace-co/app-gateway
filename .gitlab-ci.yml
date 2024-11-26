@@ -1,0 +1,137 @@
+variables:
+  ## These are defined in settings/ci_cd -> variables
+  AWS_DEFAULT_REGION: '$AWS_DEFAULT_REGION'
+  #AWS_ACCESS_KEY_ID: '$AWS_ACCESS_KEY_ID'
+  #AWS_SECRET_ACCESS_KEY: '$AWS_SECRET_ACCESS_KEY'
+  ## These are global pipeline variables and only define in this .gitlab-ci.yml
+  # CI_DEBUG_TRACE: "true"
+  ECR: '$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com'
+  ECR_IMAGE: '${ECR}/app-gateway'
+  ANSIBLE_HOST_KEY_CHECKING: 'false'
+
+stages:
+  - test
+  - build
+  - deploy
+
+.node:
+  image: node:20
+  stage: test
+  tags:
+    - app-gateway
+  cache:
+    - key: '$CI_COMMIT_REF_SLUG'
+      paths:
+        - node_modules
+  before_script:
+    - yarn install
+
+audit:
+  extends: .node
+  script:
+    - yarn audit
+  allow_failure: true
+
+.build:
+  stage: build
+  tags:
+    - app-gateway
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  services:
+    - docker:20.10.16-dind
+  only:
+    - main
+  variables:
+    ECR_IMAGE: '${ECR}/app-gateway:${ENV}-${CI_COMMIT_SHA}'
+  script:
+    - echo "$CI_COMMIT_SHA" > HEAD.txt
+    - docker build -t "$ECR_IMAGE" . -f Dockerfile
+    - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$ECR"
+    - docker push "$ECR_IMAGE"
+
+# Build different docker images at different env except for demo.
+build-dev:
+  extends: .build
+  variables:
+    ENV: 'dev'
+  when: always
+  only:
+    - develop
+
+build-stg:
+  extends: .build
+  variables:
+    ENV: 'stg'
+  when: manual
+  only:
+    - staging
+
+build-prod:
+  extends: .build
+  variables:
+    ENV: 'prod'
+  when: manual
+  only:
+    - main
+
+build-demo:
+  extends: .build
+  variables:
+    ENV: 'demo'
+  when: manual
+  only:
+    - demo
+
+.deploy:
+  #stage: deploy
+  tags:
+    - app-gateway
+  image: williamyeh/ansible:ubuntu18.04
+  variables:
+    ECR_IMAGE: '${ECR}/app-gateway:${ENV}-${CI_COMMIT_SHA}'
+  before_script:
+    - eval $(ssh-agent -s)
+    - chmod 0600 $ANSIBLE_DEPLOY_KEY
+    - ssh-add $ANSIBLE_DEPLOY_KEY
+  script:
+    - ansible-playbook -v ./ansible/deploy.yml -e image_tag="$ECR_IMAGE" -e hosts_group="app_gateway_${ENV}" -e log_group="app-gateway-${ENV}" -i ./ansible/hosts --private-key $ANSIBLE_DEPLOY_KEY
+    - echo $ECR_IMAGE
+    - echo $image_tag
+  environment:
+    name: '$ENV'
+
+deploy-dev:
+  stage: deploy
+  extends: .deploy
+  variables:
+    ENV: 'dev'
+  when: manual
+  only:
+    - develop
+
+deploy-stg:
+  stage: deploy
+  extends: .deploy
+  variables:
+    ENV: 'stg'
+  when: manual
+  only:
+    - staging
+
+deploy-prod:
+  stage: deploy
+  extends: .deploy
+  variables:
+    ENV: 'prod'
+  when: manual
+  only:
+    - main
+
+deploy-demo:
+  stage: deploy
+  extends: .deploy
+  variables:
+    ENV: 'demo'
+  when: manual
+  only:
+    - demo

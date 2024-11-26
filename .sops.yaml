@@ -1,0 +1,4 @@
+creation_rules:
+  # Configure your own KMS key ARN here
+  # Format: arn:aws:kms:<region>:<account-id>:key/<key-id>
+- kms: "arn:aws:kms:<region>:<account-id>:key/<key-id>"

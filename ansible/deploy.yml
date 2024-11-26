@@ -1,0 +1,95 @@
+---
+
+- hosts: "{{ hosts_group }}"
+  user: imbrace
+  become: true
+  become_user: root
+  become_method: sudo
+  gather_facts: no
+
+  tasks:
+
+  - name: Create app directory in target server.
+    file:
+      path: /opt/imbrace/app-gateway/
+      state: directory
+      owner: imbrace
+      group: imbrace
+      mode: "0775"
+
+  # DEV env
+  - name: Copy DEV encrypted .env from runner to target server.
+    copy:
+       src: dev/secrets.enc.env
+       dest: /opt/imbrace/app-gateway/secrets.enc.env
+       owner: imbrace
+       group: imbrace
+       mode: "0755"
+    when: "'app_gateway_dev' in group_names"
+
+  # STG env
+  - name: Copy STG encrypted .env from runner to target server.
+    copy:
+       src: stg/secrets.enc.env
+       dest: /opt/imbrace/app-gateway/secrets.enc.env
+       owner: imbrace
+       group: imbrace
+       mode: "0755"
+    when: "'app_gateway_stg' in group_names"
+
+  # Demo env
+  - name: Copy Demo encrypted .env from runner to target server.
+    copy:
+       src: demo/secrets.enc.env
+       dest: /opt/imbrace/app-gateway/secrets.enc.env
+       owner: imbrace
+       group: imbrace
+       mode: "0755"
+    when: "'app_gateway_demo' in group_names"
+
+  # prod env
+  - name: Copy prod encrypted .env from runner to target server.
+    copy:
+       src: prod/secrets.enc.env
+       dest: /opt/imbrace/app-gateway/secrets.enc.env
+       owner: imbrace
+       group: imbrace
+       mode: "0755"
+    when: "'app_gateway_prod' in group_names"
+
+  - name: Copy .sops.yaml from runner to target server.
+    copy:
+       src: ../.sops.yaml
+       dest: /opt/imbrace/app-gateway/.sops.yaml
+       owner: imbrace
+       group: imbrace
+       mode: "0755"
+
+  - name: Copy docker-compose.yml from runner to target server.
+    copy:
+       src: ./docker-compose.yml
+       dest: /opt/imbrace/app-gateway/docker-compose.yml
+       owner: imbrace
+       group: imbrace
+       mode: "0755"
+
+  - name: Deploy ips by running docker compose.
+    shell: |
+        echo "Decrypt .env at targer server."
+        sops -d secrets.enc.env > .env
+        chown imbrace:imbrace .env
+        chmod 0600 .env
+        echo "Export image_tag env var."
+        export image_tag="{{ image_tag }}"
+        export log_group="{{ log_group }}"
+        echo "Docker login to AWS ECR."
+        aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com"
+        echo "Run docker-compse for everything."
+        docker-compose down
+        docker-compose up -d
+        echo "Check if image is ready."
+        docker images -a
+        echo "Check if container is up."
+        docker ps
+    args:
+      chdir: /opt/imbrace/app-gateway/
