@@ -1,15 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 
 type OrgGuardOptions = {
-  headerName?: string;              // header do gateway set, mặc định 'x-organization-id' (cho context org)
-  paramKeys?: string[];             // key tìm org trong params
-  queryKeys?: string[];             // key tìm org trong query
-  bodyKeys?: string[];              // key tìm org trong body
-  headerKeys?: string[];            // key tìm org trong request headers (từ client)
-  checkBody?: boolean;              // có đọc body hay không
-  requireOrgInRequest?: boolean;    // có bắt buộc client gửi org trong payload không
-  onlyPaths?: RegExp[];             // chỉ áp dụng cho các path khớp
-  exceptPaths?: RegExp[];           // bỏ qua cho các path khớp
+  headerName?: string;              // header set by the gateway, defaults to 'x-organization-id' (for org context)
+  paramKeys?: string[];             // keys to find org in params
+  queryKeys?: string[];             // keys to find org in query
+  bodyKeys?: string[];              // keys to find org in body
+  headerKeys?: string[];            // keys to find org in request headers (from client)
+  checkBody?: boolean;              // whether to read the body
+  requireOrgInRequest?: boolean;    // whether the client must send org in the payload
+  onlyPaths?: RegExp[];             // only apply to matching paths
+  exceptPaths?: RegExp[];           // skip matching paths
   verbose?: boolean;                // log debug
 };
 
@@ -41,7 +41,7 @@ export function orgGuardGateway(opts: OrgGuardOptions = {}) {
     console.log('   Method:', req.method);
     console.log('   CheckBody:', checkBody);
     
-    // Lọc theo path nếu cấu hình
+    // Filter by path if configured
     if (onlyPaths?.length && !onlyPaths.some(rx => rx.test(req.path))) {
       console.log('   SKIPPED: path not in onlyPaths');
       return next();
@@ -62,7 +62,7 @@ export function orgGuardGateway(opts: OrgGuardOptions = {}) {
       return res.status(401).json({ message: 'Unauthorized - missing organization context' });
     }
 
-    // Debug: kiểm tra body type và sources
+    // Debug: check body type and sources
     console.log('[orgGuardGateway] Body debug:', {
       bodyType: typeof req.body,
       bodyIsString: typeof req.body === 'string',
@@ -77,10 +77,10 @@ export function orgGuardGateway(opts: OrgGuardOptions = {}) {
     const fromQuery  = pickFirst(req.query,  queryKeys);
     const fromHeaders = pickFirst(req.headers, headerKeys);
     
-    // Ưu tiên sử dụng parsedBody nếu có (từ raw body middleware)
+    // Prefer parsedBody if present (from the raw body middleware)
     let bodyObj = (req as any).parsedBody || req.body;
     
-    // Nếu body là string (do express.text()), cần parse thành JSON
+    // If body is a string (from express.text()), parse it to JSON
     if (checkBody && typeof bodyObj === 'string' && bodyObj.trim()) {
       try {
         bodyObj = JSON.parse(bodyObj);
@@ -92,7 +92,7 @@ export function orgGuardGateway(opts: OrgGuardOptions = {}) {
     
     const fromBody = checkBody ? pickFirst(bodyObj, bodyKeys) : undefined;
 
-    // Ưu tiên: params > query > headers > body
+    // Priority: params > query > headers > body
     const requestedOrg = fromParams ?? fromQuery ?? fromHeaders ?? fromBody;
     
     if (verbose) {
@@ -114,7 +114,7 @@ export function orgGuardGateway(opts: OrgGuardOptions = {}) {
       return next();
     }
 
-    // 4) So khớp
+    // 4) Match
     if (`${requestedOrg}` !== `${ctxOrg}`) {
       if (verbose) {
         console.warn('[orgGuardGateway] organization mismatch', {

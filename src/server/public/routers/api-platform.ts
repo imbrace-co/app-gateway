@@ -32,21 +32,30 @@ const platformProxy = createProxyMiddleware({
       console.log(`   User Context: ${JSON.stringify(req.userContext, null, 2)}`);
 
       proxyReq.removeHeader('content-length');
-      proxyReq.removeHeader('x-access-token');
+      // Always strip the gateway-level Bearer auth header (platform doesn't use it).
       proxyReq.removeHeader('authorization');
 
-      if (req.userContext?.org_id) {
-        proxyReq.setHeader('x-organization-id', req.userContext.org_id);
+      if (req.userContext) {
+        // Gateway authenticated this request → inject the trusted identity and
+        // replace any client-supplied access token with the trusted one.
+        proxyReq.removeHeader('x-access-token');
+        if (req.userContext.org_id) {
+          proxyReq.setHeader('x-organization-id', req.userContext.org_id);
+        }
+        if (req.userContext.email) {
+          proxyReq.setHeader('x-user-email', req.userContext.email);
+        }
+        if (req.userContext.api_key) {
+          proxyReq.setHeader('x-api-key', req.userContext.api_key);
+        }
+        if (req.userContext.access_token) {
+          proxyReq.setHeader('x-access-token', req.userContext.access_token);
+        }
       }
-      if (req.userContext?.email) {
-        proxyReq.setHeader('x-user-email', req.userContext.email);
-      }
-      if (req.userContext?.api_key) {
-        proxyReq.setHeader('x-api-key', req.userContext.api_key);
-      }
-      if (req.userContext?.access_token) {
-        proxyReq.setHeader('x-access-token', req.userContext.access_token);
-      }
+      // Public sub-paths (e.g. /organizations) skip gateway auth, so userContext
+      // is undefined here. Pass the client's original x-access-token through
+      // untouched so the platform's loginAccess middleware can validate it
+      // (login_acc_* flow). Previously the token was always stripped → 401.
     },
 
     proxyRes: (proxyRes, req: Request) => {

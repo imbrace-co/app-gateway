@@ -8,7 +8,7 @@ import { orgGuardGateway } from '../../middlewares/orgGuardGateway';
 
 const router = express.Router();
 
-// Middleware để capture và buffer raw body
+// Middleware to capture and buffer the raw body
 router.use((req, res, next) => {
   if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
     const chunks: Buffer[] = [];
@@ -389,12 +389,12 @@ router.use(
   })
 );
 
-// Proxy cho API có org_id trong URL path: /organization/:org_id/channels/*
+// Proxy for APIs with org_id in the URL path: /organization/:org_id/channels/*
 router.use(
   '/organization/:org_id/channels',
   orgGuardGateway({
     paramKeys: ['org_id'],
-    requireOrgInRequest: true, // Bắt buộc vì org_id trong URL
+    requireOrgInRequest: true, // Required because org_id is in the URL
     verbose: true,
   }),
   createProxyMiddleware({
