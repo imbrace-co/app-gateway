@@ -222,5 +222,4 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 
 ## License
 
-Open-source license: [LICENSE.md](LICENSE.md)  
-Enterprise edition: [LICENSE_EE.md](LICENSE_EE.md)
+MIT — see [LICENSE](LICENSE).
