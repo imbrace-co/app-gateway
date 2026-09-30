@@ -296,23 +296,31 @@ const startPublicServer = async () => {
       '/access',
       '/organizations',
     ];
+    // Public sub-paths that still serve API-key callers. authRouter is skipped on public paths, so
+    // without this an x-api-key never becomes x-user-id/x-organization-id and platform answers 401.
+    // Requests that carry a token (x-access-token / Bearer) keep the old passthrough, and login-flow
+    // paths (/login, /sso, /access, ...) are deliberately not listed.
+    const platformApiKeyAwareSubPaths = ['/organizations'];
+    const matchesSubPath = (path: string, subPaths: string[]) =>
+      subPaths.some((subPath) => path === subPath || path.startsWith(subPath + '/'));
+    const useApiKeyOnPublicPath = (req: import('express').Request) =>
+      !!req.headers['x-api-key'] &&
+      !req.headers['x-access-token'] &&
+      !req.headers['authorization']?.startsWith('Bearer ') &&
+      matchesSubPath(req.path, platformApiKeyAwareSubPaths);
     const platformV1ConditionalAuth = (req: import('express').Request, res: import('express').Response, next: import('express').NextFunction) => {
-      const isPublic = platformV1PublicSubPaths.some(
-        (subPath) => req.path === subPath || req.path.startsWith(subPath + '/')
-      );
-      if (isPublic) return next();
+      const isPublic = matchesSubPath(req.path, platformV1PublicSubPaths);
+      if (isPublic && !useApiKeyOnPublicPath(req)) return next();
       return authRouter(req, res, next);
     };
     app.use('/v1/platform', platformV1ConditionalAuth, apiPlatformService);
     app.use('/platform/v1', platformV1ConditionalAuth, apiPlatformService);
     const platformV2PublicSubPaths = ['/organizations'];
     const platformV2ConditionalAuth = (req: import('express').Request, res: import('express').Response, next: import('express').NextFunction) => {
-      const isPublic = platformV2PublicSubPaths.some(
-        (subPath) => req.path === subPath || req.path.startsWith(subPath + '/')
-      )
+      const isPublic = matchesSubPath(req.path, platformV2PublicSubPaths)
         // team-invite accept link clicked from the invitation email (public, no token)
         || req.path.endsWith('/email/accept');
-      if (isPublic) return next();
+      if (isPublic && !useApiKeyOnPublicPath(req)) return next();
       return authRouter(req, res, next);
     };
     app.use('/v2/platform', platformV2ConditionalAuth, apiPlatformServiceV2);
