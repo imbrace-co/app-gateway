@@ -46,6 +46,13 @@ const startPublicServer = async () => {
     //    the ALS context exists before the access logger registers its hook.
     app.use(requestContext);
 
+    // Internal services use this header to read unmasked credentials from chat-ai;
+    // never let a public client present it.
+    app.use((req, _res, next) => {
+      delete req.headers['x-internal-service-key'];
+      next();
+    });
+
     // 1. CORS (needs to run early so OPTIONS preflight is handled before other work)
     const corsOptions = {
       origin: true,
